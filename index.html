@@ -1,0 +1,612 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Student Grade Calculator — The Human Question</title>
+
+<!--
+  Student Grade Calculator
+  ------------------------
+  A simple web app that tells students what score they need on
+  their final exam to hit a desired course grade.
+
+  How it works (the core formula):
+
+    desiredGrade = currentGrade * (1 - finalWeight) + requiredFinal * finalWeight
+
+  Solving for requiredFinal:
+
+    requiredFinal = (desiredGrade - currentGrade * (1 - finalWeight)) / finalWeight
+
+  Two modes:
+    1. Simple mode  — student enters their current overall average directly.
+    2. Detailed mode — student enters category-by-category averages (HW, exams,
+       quizzes, etc.) and the app computes the current weighted average
+       automatically before using the formula above.
+
+  Built as a single self-contained HTML file. No external dependencies.
+  Drop it on a server, paste it into Squarespace, or open it locally — it just runs.
+-->
+
+<style>
+  /* ===== Theme variables (change these to re-skin the app) ===== */
+  :root {
+    --blue: #1E40AF;
+    --blue-dark: #1E3A8A;
+    --blue-soft: rgba(30, 64, 175, 0.08);
+    --bg: #FAFAF7;
+    --card: #FFFFFF;
+    --text: #1A1A1A;
+    --muted: #6B6B6B;
+    --border: #E5E5E0;
+    --green: #047857;
+    --amber: #B45309;
+    --red: #B91C1C;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+  .container { max-width: 720px; margin: 0 auto; padding: 32px 20px 60px; }
+
+  /* ===== Hero ===== */
+  header { text-align: center; margin-bottom: 24px; }
+  .eyebrow {
+    font-size: 12px; letter-spacing: 0.18em; text-transform: uppercase;
+    color: var(--blue); font-weight: 600; margin-bottom: 8px;
+  }
+  header h1 {
+    font-size: clamp(26px, 4vw, 34px);
+    font-weight: 700; margin: 0 0 8px;
+    letter-spacing: -0.01em;
+  }
+  header p { color: var(--muted); margin: 0; max-width: 520px; margin: 0 auto; font-size: 15px; }
+
+  /* ===== Card ===== */
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 24px;
+    margin-bottom: 18px;
+  }
+  .card h2 {
+    margin: 0 0 14px;
+    font-size: 16px;
+    color: var(--blue);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    font-weight: 700;
+  }
+
+  /* ===== Form fields ===== */
+  .field { margin-bottom: 14px; }
+  .field:last-child { margin-bottom: 0; }
+  .field label {
+    display: block;
+    font-size: 13px;
+    font-weight: 600;
+    margin-bottom: 6px;
+  }
+  .field .hint {
+    font-weight: 400;
+    color: var(--muted);
+    font-size: 12px;
+    margin-left: 6px;
+  }
+  .field input {
+    width: 100%;
+    padding: 10px 12px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    font-size: 15px;
+    font-family: inherit;
+    background: #FCFCFA;
+    color: var(--text);
+    transition: border-color 0.15s, box-shadow 0.15s;
+  }
+  .field input:focus {
+    outline: none;
+    border-color: var(--blue);
+    box-shadow: 0 0 0 3px rgba(30, 64, 175, 0.12);
+  }
+
+  /* Two-column inputs for desktop */
+  .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  @media (max-width: 520px) { .two-col { grid-template-columns: 1fr; } }
+
+  /* ===== Mode toggle ===== */
+  .modes { display: flex; gap: 6px; background: #F3F4F6; padding: 4px; border-radius: 10px; }
+  .mode-btn {
+    flex: 1;
+    padding: 9px 14px;
+    border: none;
+    background: transparent;
+    color: var(--muted);
+    font-size: 13.5px;
+    font-weight: 600;
+    cursor: pointer;
+    border-radius: 7px;
+    font-family: inherit;
+    transition: all 0.15s;
+  }
+  .mode-btn.active {
+    background: white;
+    color: var(--blue);
+    box-shadow: 0 2px 6px rgba(0,0,0,0.05);
+  }
+
+  /* ===== Categories table (detailed mode) ===== */
+  .cat-table { width: 100%; border-collapse: collapse; margin-top: 8px; }
+  .cat-table th {
+    text-align: left;
+    font-weight: 600;
+    color: var(--muted);
+    padding: 6px 4px;
+    font-size: 11px;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    border-bottom: 1px solid var(--border);
+  }
+  .cat-table td {
+    padding: 5px 4px;
+    border-bottom: 1px solid var(--border);
+  }
+  .cat-table input {
+    width: 100%;
+    padding: 8px 10px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    font-size: 14px;
+    font-family: inherit;
+  }
+  .cat-table .num { width: 90px; }
+  .cat-table .del { width: 40px; text-align: center; }
+  .cat-table .del button {
+    background: none;
+    border: none;
+    font-size: 18px;
+    color: var(--muted);
+    cursor: pointer;
+    padding: 4px 8px;
+    border-radius: 6px;
+  }
+  .cat-table .del button:hover { background: #FEE2E2; color: var(--red); }
+  .add-row {
+    background: var(--blue-soft);
+    color: var(--blue);
+    border: none;
+    padding: 9px 14px;
+    border-radius: 8px;
+    font-weight: 600;
+    cursor: pointer;
+    margin-top: 12px;
+    font-family: inherit;
+    font-size: 13.5px;
+  }
+  .add-row:hover { background: var(--blue); color: white; }
+  .running-avg {
+    margin-top: 12px;
+    padding: 12px 14px;
+    background: var(--blue-soft);
+    border-radius: 8px;
+    font-size: 13.5px;
+    color: var(--text);
+  }
+  .running-avg strong { color: var(--blue); font-size: 16px; }
+
+  /* ===== Buttons ===== */
+  .btn {
+    padding: 12px 20px;
+    border-radius: 9px;
+    font-size: 15px;
+    font-weight: 700;
+    cursor: pointer;
+    font-family: inherit;
+    border: none;
+    transition: background 0.15s, transform 0.05s;
+  }
+  .btn:active { transform: translateY(1px); }
+  .btn-primary { background: var(--blue); color: white; width: 100%; }
+  .btn-primary:hover { background: var(--blue-dark); }
+  .btn-secondary {
+    background: white;
+    color: var(--text);
+    border: 1px solid var(--border);
+    margin-top: 10px;
+    width: 100%;
+  }
+  .btn-secondary:hover { background: #F3F4F6; }
+
+  /* ===== Result panel ===== */
+  .result {
+    text-align: center;
+    padding: 30px 24px;
+    border-radius: 14px;
+    margin-bottom: 18px;
+    border: 1px solid var(--border);
+    background: white;
+  }
+  .result.achievable { background: linear-gradient(180deg, rgba(4, 120, 87, 0.06), white); border-color: rgba(4, 120, 87, 0.25); }
+  .result.borderline { background: linear-gradient(180deg, rgba(180, 83, 9, 0.06), white); border-color: rgba(180, 83, 9, 0.25); }
+  .result.not-achievable { background: linear-gradient(180deg, rgba(185, 28, 28, 0.06), white); border-color: rgba(185, 28, 28, 0.25); }
+  .result-label {
+    font-size: 12px;
+    color: var(--muted);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    font-weight: 600;
+    margin-bottom: 8px;
+  }
+  .result-number {
+    font-size: clamp(48px, 9vw, 64px);
+    font-weight: 800;
+    color: var(--text);
+    letter-spacing: -0.03em;
+    line-height: 1;
+    margin: 0 0 8px;
+  }
+  .result.achievable .result-number { color: var(--green); }
+  .result.borderline .result-number { color: var(--amber); }
+  .result.not-achievable .result-number { color: var(--red); }
+  .result-message {
+    font-size: 15px;
+    color: var(--text);
+    margin: 0 auto;
+    max-width: 460px;
+    line-height: 1.5;
+  }
+  .result-empty { color: var(--muted); padding: 24px; text-align: center; }
+
+  /* ===== How it works section ===== */
+  .explainer {
+    margin-top: 32px;
+    padding: 24px;
+    background: white;
+    border: 1px solid var(--border);
+    border-radius: 14px;
+  }
+  .explainer h2 { color: var(--blue); margin: 0 0 8px; font-size: 18px; }
+  .explainer p { font-size: 14.5px; margin: 0 0 12px; }
+  .explainer code {
+    background: #1A1A1A;
+    color: #F5F5F0;
+    padding: 8px 10px;
+    border-radius: 6px;
+    font-family: "SF Mono", Menlo, Consolas, monospace;
+    font-size: 13px;
+    display: inline-block;
+    margin: 4px 0;
+  }
+  .explainer ul { font-size: 14px; padding-left: 20px; margin: 8px 0; }
+  .explainer li { margin-bottom: 4px; }
+
+  footer {
+    text-align: center;
+    margin-top: 40px;
+    font-size: 12px;
+    color: var(--muted);
+  }
+  footer a { color: var(--blue); text-decoration: none; font-weight: 600; }
+  footer a:hover { text-decoration: underline; }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <!-- Hero -->
+  <header>
+    <div class="eyebrow">The Human Question</div>
+    <h1>Student Grade Calculator</h1>
+    <p>Find out exactly what you need on the final to get the grade you want.</p>
+  </header>
+
+  <!-- Course info -->
+  <div class="card">
+    <h2>Course Info</h2>
+    <div class="two-col">
+      <div class="field">
+        <label>Course name <span class="hint">(optional)</span></label>
+        <input type="text" id="courseName" placeholder="e.g. ACCT 3330">
+      </div>
+      <div class="field">
+        <label>Desired final grade <span class="hint">(0–100)</span></label>
+        <input type="number" id="desiredGrade" min="0" max="100" step="0.1" placeholder="e.g. 90">
+      </div>
+    </div>
+  </div>
+
+  <!-- Mode + grade input -->
+  <div class="card">
+    <h2>Your Current Grade</h2>
+    <div class="modes" role="tablist">
+      <button class="mode-btn active" id="simpleMode" role="tab">Simple</button>
+      <button class="mode-btn" id="detailedMode" role="tab">By category</button>
+    </div>
+
+    <!-- Simple mode -->
+    <div id="simplePanel" style="margin-top: 18px;">
+      <div class="two-col">
+        <div class="field">
+          <label>Current avg <span class="hint">(without the final)</span></label>
+          <input type="number" id="currentGrade" min="0" max="100" step="0.1" placeholder="e.g. 85">
+        </div>
+        <div class="field">
+          <label>Final exam weight <span class="hint">(% of course)</span></label>
+          <input type="number" id="finalWeight" min="0" max="100" step="0.1" placeholder="e.g. 30">
+        </div>
+      </div>
+    </div>
+
+    <!-- Detailed mode -->
+    <div id="detailedPanel" style="margin-top: 18px; display: none;">
+      <p style="font-size: 13.5px; color: var(--muted); margin: 0 0 10px;">
+        Add each category. Weights should sum to 100% (final exam weight included).
+      </p>
+      <table class="cat-table">
+        <thead>
+          <tr>
+            <th>Category</th>
+            <th class="num">Current %</th>
+            <th class="num">Weight %</th>
+            <th class="del"></th>
+          </tr>
+        </thead>
+        <tbody id="catRows"></tbody>
+      </table>
+      <button class="add-row" id="addCat">+ Add category</button>
+      <div class="field" style="margin-top: 16px;">
+        <label>Final exam weight <span class="hint">(% of course)</span></label>
+        <input type="number" id="finalWeightDetailed" min="0" max="100" step="0.1" placeholder="e.g. 30">
+      </div>
+      <div class="running-avg" id="runningAvg">
+        Current weighted average (excluding final): <strong id="runningAvgValue">—</strong>
+      </div>
+    </div>
+  </div>
+
+  <!-- Calculate button -->
+  <button class="btn btn-primary" id="calcBtn">Calculate</button>
+
+  <!-- Result -->
+  <div class="result" id="result" style="margin-top: 22px;">
+    <div class="result-empty">Fill in your numbers above and tap <strong>Calculate</strong>.</div>
+  </div>
+
+  <!-- Explainer -->
+  <div class="explainer">
+    <h2>How the calculation works</h2>
+    <p>The math is straightforward. Your final course grade is a weighted average of two things: everything you have done so far, and the final.</p>
+    <p>Let <em>desired</em> be the grade you want, <em>current</em> be your average without the final, and <em>w</em> be the final exam weight (as a decimal — 30% becomes 0.30). The score you need on the final is:</p>
+    <code>required = (desired − current × (1 − w)) ÷ w</code>
+    <p>If the answer comes out above 100 and your professor does not allow extra credit, the goal is not reachable. If it comes out negative, you have already locked in the grade and the final almost cannot hurt you.</p>
+    <h2 style="margin-top: 18px;">How to make this app your own</h2>
+    <ul>
+      <li>Open the file in any text editor (Notepad, TextEdit, VS Code).</li>
+      <li>Find the <code>:root</code> block at the top — change the colors there to re-skin the whole app.</li>
+      <li>Look for the <code>letterGrade()</code> function to adjust the grade-to-letter mapping for your school's scale.</li>
+      <li>Change the headline text in the <code>&lt;header&gt;</code> block to match your course.</li>
+    </ul>
+    <p style="margin: 14px 0 0; color: var(--muted); font-size: 13.5px;">Built with Claude. Generated from a single prompt. The full source you are reading right now is the entire app.</p>
+  </div>
+
+  <footer>
+    The Human Question · April 2026 · <a href="https://www.thehumanquestion.org">thehumanquestion.org</a>
+  </footer>
+</div>
+
+<script>
+/* ============================================================
+   1. Application state
+   ============================================================ */
+let mode = "simple";  // "simple" or "detailed"
+let categories = [
+  { name: "Homework", current: 90, weight: 20 },
+  { name: "Exams",    current: 85, weight: 30 },
+  { name: "Quizzes",  current: 88, weight: 20 }
+];
+
+/* ============================================================
+   2. DOM references
+   ============================================================ */
+const simpleBtn   = document.getElementById('simpleMode');
+const detailedBtn = document.getElementById('detailedMode');
+const simplePanel = document.getElementById('simplePanel');
+const detailedPanel = document.getElementById('detailedPanel');
+const catRows     = document.getElementById('catRows');
+const runningAvgValue = document.getElementById('runningAvgValue');
+const calcBtn     = document.getElementById('calcBtn');
+const resultEl    = document.getElementById('result');
+
+/* ============================================================
+   3. Mode toggle (simple ↔ detailed)
+   ============================================================ */
+simpleBtn.addEventListener('click', () => setMode('simple'));
+detailedBtn.addEventListener('click', () => setMode('detailed'));
+
+function setMode(m) {
+  mode = m;
+  simpleBtn.classList.toggle('active', m === 'simple');
+  detailedBtn.classList.toggle('active', m === 'detailed');
+  simplePanel.style.display = m === 'simple' ? 'block' : 'none';
+  detailedPanel.style.display = m === 'detailed' ? 'block' : 'none';
+}
+
+/* ============================================================
+   4. Detailed mode — category rows
+   ============================================================ */
+function renderCategories() {
+  catRows.innerHTML = categories.map((c, i) => `
+    <tr>
+      <td><input type="text" data-i="${i}" data-f="name" value="${c.name}" placeholder="Category"></td>
+      <td class="num"><input type="number" data-i="${i}" data-f="current" value="${c.current}" min="0" max="100" step="0.1"></td>
+      <td class="num"><input type="number" data-i="${i}" data-f="weight" value="${c.weight}" min="0" max="100" step="0.1"></td>
+      <td class="del"><button data-del="${i}" aria-label="Remove">×</button></td>
+    </tr>
+  `).join('');
+  updateRunningAvg();
+}
+
+catRows.addEventListener('input', e => {
+  const i = e.target.dataset.i;
+  const f = e.target.dataset.f;
+  if (i !== undefined && f) {
+    categories[i][f] = e.target.value;
+    updateRunningAvg();
+  }
+});
+catRows.addEventListener('click', e => {
+  const i = e.target.dataset.del;
+  if (i !== undefined) {
+    categories.splice(parseInt(i), 1);
+    renderCategories();
+  }
+});
+document.getElementById('addCat').addEventListener('click', () => {
+  categories.push({ name: "", current: 0, weight: 0 });
+  renderCategories();
+});
+
+// Compute current weighted average from the categories the user entered
+function updateRunningAvg() {
+  let totalWeight = 0, weightedSum = 0;
+  categories.forEach(c => {
+    const w = parseFloat(c.weight) || 0;
+    const g = parseFloat(c.current);
+    if (!isNaN(g) && w > 0) {
+      totalWeight += w;
+      weightedSum += g * w;
+    }
+  });
+  if (totalWeight === 0) {
+    runningAvgValue.textContent = "—";
+    return null;
+  }
+  const avg = weightedSum / totalWeight;
+  runningAvgValue.textContent = avg.toFixed(2) + "%";
+  return avg;
+}
+
+renderCategories();
+
+/* ============================================================
+   5. The core calculation
+   ============================================================ */
+function calculate() {
+  const courseName = document.getElementById('courseName').value.trim();
+  const desired = parseFloat(document.getElementById('desiredGrade').value);
+
+  let currentGrade, finalWeight;
+
+  if (mode === 'simple') {
+    currentGrade = parseFloat(document.getElementById('currentGrade').value);
+    finalWeight  = parseFloat(document.getElementById('finalWeight').value);
+  } else {
+    currentGrade = updateRunningAvg();
+    finalWeight  = parseFloat(document.getElementById('finalWeightDetailed').value);
+  }
+
+  // Validation: tell the user what's missing instead of silently doing nothing
+  if (isNaN(desired)) return showError("Enter the grade you want to earn.");
+  if (currentGrade === null || isNaN(currentGrade)) return showError("Enter your current grade (or fill in the categories).");
+  if (isNaN(finalWeight) || finalWeight <= 0 || finalWeight >= 100) return showError("Enter the final exam weight (between 1 and 99).");
+
+  const w = finalWeight / 100;            // convert to decimal
+  const required = (desired - currentGrade * (1 - w)) / w;
+
+  showResult({
+    courseName: courseName || "this course",
+    desired,
+    currentGrade,
+    finalWeight,
+    required
+  });
+}
+
+calcBtn.addEventListener('click', calculate);
+
+function showError(msg) {
+  resultEl.className = "result not-achievable";
+  resultEl.innerHTML = `<div class="result-empty" style="color: var(--red);">${msg}</div>`;
+}
+
+/* ============================================================
+   6. Display the result
+   ============================================================ */
+function showResult(r) {
+  let cssClass, label, message;
+
+  if (r.required <= 0) {
+    // Already locked in — final cannot hurt them
+    cssClass = "achievable";
+    label = "You're already there";
+    message = `Even a 0 on the final keeps you at or above your goal of ${r.desired}. Show up, do your best, breathe.`;
+  } else if (r.required <= 70) {
+    cssClass = "achievable";
+    label = `You need a ${roundDisplay(r.required)} on the final`;
+    message = `Comfortable target. To earn a ${r.desired}${letterParen(r.desired)} in <strong>${r.courseName || "this course"}</strong>, you need at least ${roundDisplay(r.required)} on the final.`;
+  } else if (r.required <= 90) {
+    cssClass = "achievable";
+    label = `You need a ${roundDisplay(r.required)} on the final`;
+    message = `Reachable. To earn a ${r.desired}${letterParen(r.desired)} in <strong>${r.courseName || "this course"}</strong>, you need at least ${roundDisplay(r.required)} on the final.`;
+  } else if (r.required <= 100) {
+    cssClass = "borderline";
+    label = `You need a ${roundDisplay(r.required)} on the final`;
+    message = `Tight margin. ${roundDisplay(r.required)} is doable but leaves no room for error. To earn a ${r.desired}${letterParen(r.desired)}, you have to show up sharp.`;
+  } else {
+    cssClass = "not-achievable";
+    label = "Not achievable without extra credit";
+    message = `You would need a <strong>${roundDisplay(r.required)}</strong> on the final, which is above 100%. Without extra credit, the ${r.desired} target is out of reach. Talk to your professor about options, or set a more reachable goal.`;
+  }
+
+  resultEl.className = "result " + cssClass;
+  resultEl.innerHTML = `
+    <div class="result-label">${label}</div>
+    <div class="result-number">${r.required > 100 ? "—" : roundDisplay(r.required)}</div>
+    <p class="result-message">${message}</p>
+  `;
+}
+
+function roundDisplay(n) {
+  // Show a clean integer if the result is close to whole, otherwise one decimal
+  return Math.abs(n - Math.round(n)) < 0.05 ? Math.round(n) : n.toFixed(1);
+}
+
+function letterParen(g) {
+  const l = letterGrade(g);
+  return l ? ` (${l})` : "";
+}
+
+// Letter-grade mapping (adjust if your school uses a different scale)
+function letterGrade(g) {
+  if (g >= 93) return "A";
+  if (g >= 90) return "A-";
+  if (g >= 87) return "B+";
+  if (g >= 83) return "B";
+  if (g >= 80) return "B-";
+  if (g >= 77) return "C+";
+  if (g >= 73) return "C";
+  if (g >= 70) return "C-";
+  if (g >= 67) return "D+";
+  if (g >= 63) return "D";
+  if (g >= 60) return "D-";
+  return "F";
+}
+
+/* ============================================================
+   7. Quality-of-life: pressing Enter calculates
+   ============================================================ */
+document.querySelectorAll('input').forEach(inp => {
+  inp.addEventListener('keydown', e => {
+    if (e.key === 'Enter') calculate();
+  });
+});
+</script>
+</body>
+</html>
